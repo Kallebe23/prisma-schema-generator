@@ -4,18 +4,10 @@ import { useEffect, useState } from "react";
 import { CodeBlock } from "./code-block";
 import { CopyButton } from "./copy-button";
 import { useDiagram } from "@/store/diagram";
+import { generatePrismaSchema } from "@/lib/code-generator";
 
 export function CodeViewer() {
-  const [code, setCode] = useState(`
-model User {
-  id      Int      @id @default(autoincrement())
-  email   String   @unique
-  name    String?
-  role    Role     @default(USER)
-  posts   Post[]
-  profile Profile?
-}
-    `);
+  const [code, setCode] = useState("");
 
   const { nodes } = useDiagram();
 
@@ -24,23 +16,7 @@ model User {
       .filter((node) => node.type === "model")
       .map((node) => node.data);
 
-    let code = ``;
-
-    // fill each model
-    models.forEach((model) => {
-      code += `\nmodel ${model.name} {\n`;
-
-      // fill each model field
-      model.fields.forEach((field) => {
-        let fieldTypeModifier = "";
-        if (field.isList) fieldTypeModifier = "[]";
-        if (field.isOptional) fieldTypeModifier = "?";
-
-        code += `\t${field.name} ${field.type}${fieldTypeModifier}\n`;
-      });
-
-      code += "}\n";
-    });
+    const code = generatePrismaSchema(models);
 
     setCode(code);
   }, [nodes]);

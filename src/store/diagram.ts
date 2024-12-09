@@ -1,14 +1,27 @@
 import { Model, ModelField } from "@/types/schema";
-import { Node } from "@xyflow/react";
+import {
+  addEdge,
+  applyEdgeChanges,
+  applyNodeChanges,
+  Edge,
+  Node,
+  OnConnect,
+  OnEdgesChange,
+  OnNodesChange,
+} from "@xyflow/react";
 import { create } from "zustand";
 import { persist, createJSONStorage } from "zustand/middleware";
 import { v4 as uuidv4 } from "uuid";
 
 interface Diagram {
   nodes: Node<Model, "model">[];
-  setNodes: (newNodes: Node<Model, "model">[]) => void;
+  edges: Edge[];
 
-  addModel: (model: Model) => void;
+  onNodesChange: OnNodesChange<Node<Model, "model">>;
+  onEdgesChange: OnEdgesChange;
+  onConnect: OnConnect;
+
+  addModel: (model: Model, position: { x: number; y: number }) => void;
   removeModel: (id: string) => void;
 
   addField: (nodeId: string, field: ModelField) => void;
@@ -20,29 +33,39 @@ interface Diagram {
 
 export const useDiagram = create<Diagram>()(
   persist(
-    (set) => ({
-      nodes: [
-        {
-          id: uuidv4(),
-          type: "model",
-          data: {
-            fields: [],
-            name: "Users",
-          },
-          position: { x: 120, y: 120 },
-        },
-      ],
-      setNodes: (nodes) => set({ nodes }),
-      addModel: (model) =>
+    (set, get) => ({
+      nodes: [],
+      edges: [],
+
+      onNodesChange: (changes) => {
+        set({
+          nodes: applyNodeChanges(changes, get().nodes),
+        });
+      },
+      onEdgesChange: (changes) => {
+        set({
+          edges: applyEdgeChanges(changes, get().edges),
+        });
+      },
+      onConnect: (connection) => {
+        set({
+          edges: addEdge(
+            {
+              ...connection,
+              type: "model",
+            },
+            get().edges
+          ),
+        });
+      },
+
+      addModel: (model, position) =>
         set((state) => ({
           nodes: [
             ...state.nodes,
             {
               id: uuidv4(),
-              position: {
-                x: 0,
-                y: 0,
-              },
+              position,
               data: model,
               type: "model",
             },
@@ -96,6 +119,7 @@ export const useDiagram = create<Diagram>()(
       storage: createJSONStorage(() => localStorage),
       partialize: (state) => ({
         nodes: state.nodes,
+        edges: state.edges,
       }),
       onRehydrateStorage: () => (state) => {
         state?.setHasHydrated(true);

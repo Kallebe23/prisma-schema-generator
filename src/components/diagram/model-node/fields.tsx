@@ -7,7 +7,6 @@ import DeleteFieldButton from "./delete-field-button";
 export default function ModelFields() {
   const nodeId = useNodeId();
   const node = useNodesData<Node<Model>>(nodeId || "");
-
   const fields = node?.data.fields || [];
 
   return (
@@ -22,11 +21,9 @@ export default function ModelFields() {
                 {field.isList && "[]"}
                 {field.isOptional && "?"}
               </span>
-              <span>
-                {field.attributes?.map((attr) => (
-                  <span key={attr.name}>{attr.name}</span>
-                ))}
-              </span>
+              {field.attributes?.map((attr) => (
+                <span key={attr.name}>{attr.name}</span>
+              ))}
             </div>
             <DeleteFieldButton field={field} />
           </div>

@@ -16,6 +16,7 @@ import { Save } from "lucide-react";
 import { toast } from "sonner";
 import { z } from "@/lib/pt-zod";
 import { useDiagram } from "@/store/diagram";
+import { useReactFlow } from "@xyflow/react";
 
 const modelFormSchema = z.object({
   name: z.string().min(1),
@@ -27,7 +28,7 @@ interface ModelFormProps {
 
 export default function ModelForm({ onModelSave }: ModelFormProps) {
   const { addModel, nodes } = useDiagram();
-
+  const { screenToFlowPosition } = useReactFlow();
   const form = useForm<z.infer<typeof modelFormSchema>>({
     resolver: zodResolver(modelFormSchema),
     defaultValues: {
@@ -45,10 +46,17 @@ export default function ModelForm({ onModelSave }: ModelFormProps) {
       return;
     }
 
-    addModel({
-      name,
-      fields: [],
+    const { x, y } = screenToFlowPosition({
+      x: window.innerWidth / 2 - 300,
+      y: window.innerHeight / 2,
     });
+    addModel(
+      {
+        name,
+        fields: [],
+      },
+      { x, y }
+    );
 
     toast.success("Modelo adicionado!");
     form.reset();
@@ -65,7 +73,10 @@ export default function ModelForm({ onModelSave }: ModelFormProps) {
             <FormItem>
               <FormLabel>Nome</FormLabel>
               <FormControl>
-                <Input placeholder="Nome" {...field} />
+                <Input
+                  placeholder="Nome do modelo (User, Post, Category...)"
+                  {...field}
+                />
               </FormControl>
               <FormMessage />
             </FormItem>

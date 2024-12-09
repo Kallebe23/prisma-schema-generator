@@ -11,10 +11,8 @@ interface Props {
 }
 
 export default function ModelNode({ data }: Props) {
-  console.log("data: ", data);
   return (
     <div className="p-2 bg-slate-300 rounded min-w-52 shadow-md">
-      <Handle type="target" position={Position.Top} />
       <ModelNodeToolbar />
       <div className="spacing-1">
         <P>
@@ -23,7 +21,10 @@ export default function ModelNode({ data }: Props) {
         <Separator />
         <NodeFields />
       </div>
-      <Handle type="source" position={Position.Bottom} />
+      <Handle type="source" position={Position.Top} id="a" />
+      <Handle type="source" position={Position.Right} id="b" />
+      <Handle type="source" position={Position.Bottom} id="c" />
+      <Handle type="source" position={Position.Left} id="d" />
     </div>
   );
 }

@@ -2,21 +2,18 @@ import { FieldAttributeName } from "@/types/schema-enums";
 import { attributeColumns } from "./columns";
 import { AttributesTable, DataTableProps } from "./data-table";
 import { ModelFieldFormType } from "..";
-import { useForm } from "react-hook-form";
+import { useFormContext } from "react-hook-form";
 
 export default function FieldAttributes({}) {
-  const methods = useForm<ModelFieldFormType>();
+  const methods = useFormContext<ModelFieldFormType>();
 
   const handleRowSelectionChange: DataTableProps["onSelectedAttributesChange"] =
     (newRowSelection) => {
       const selectedAttributes = Object.keys(newRowSelection).map((rowId) => ({
-        name: rowId,
+        name: rowId as FieldAttributeName,
         arguments: [],
       }));
-      methods.setValue(
-        "attributes",
-        selectedAttributes as ModelFieldFormType["attributes"]
-      );
+      methods.setValue("attributes", selectedAttributes);
     };
 
   return (

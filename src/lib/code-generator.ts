@@ -1,16 +1,30 @@
 import { Model } from "@/types/schema";
 
 export function generatePrismaSchema(models: Model[]) {
-  const schema = models.map((model) => {
-    const modelAttributes = model.attributes
-      .map(({ name, type, modifiers }) => {
-        const modifiersString = modifiers ? ` ${modifiers.join(" ")}` : "";
-        return `  ${name} ${type}${modifiersString}`;
-      })
-      .join("\n");
+  let code = ``;
 
-    return `model ${model.name} {\n${modelAttributes}\n}`;
+  // fill each model
+  models.forEach((model) => {
+    code += `\nmodel ${model.name} {\n`;
+
+    // fill each model field
+    model.fields.forEach((field) => {
+      let fieldTypeModifier = "";
+      if (field.isList) fieldTypeModifier = "[]";
+      if (field.isOptional) fieldTypeModifier = "?";
+
+      code += `\t${field.name} ${field.type}${fieldTypeModifier}`;
+
+      // fill each field attribute
+      field.attributes.forEach((attribute) => {
+        code += ` ${attribute.name}`;
+      });
+
+      code += "\n"; // go to next field
+    });
+
+    code += "}\n";
   });
 
-  return schema.join("\n\n");
+  return code;
 }

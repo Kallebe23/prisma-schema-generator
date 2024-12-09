@@ -36,7 +36,7 @@ export interface ModelField {
   isOptional: boolean;
   isList: boolean;
 
-  attributes?: ModelFieldAttribute[];
+  attributes: ModelFieldAttribute[];
 }
 
 export type Model = {
