@@ -522,6 +522,7 @@ const MultipleSelector = React.forwardRef<
               }}
               onFocus={(event) => {
                 setOpen(true);
+                // eslint-disable-next-line @typescript-eslint/no-unused-expressions
                 triggerSearchOnFocus && onSearch?.(debouncedSearchTerm);
                 inputProps?.onFocus?.(event);
               }}

@@ -2,7 +2,7 @@
 import { Dialog, DialogContent, DialogTitle } from "@/components/ui/dialog";
 import { DialogHeader } from "@/components/ui/dialog";
 import { useDiagram } from "@/store/diagram";
-import { useMemo } from "react";
+import { useEffect, useMemo } from "react";
 import { z } from "@/lib/pt-zod";
 import { useForm } from "react-hook-form";
 import {
@@ -35,8 +35,11 @@ import { toast } from "sonner";
 
 export default function AddRelationDialog() {
   const { nodes, addField, onConnect } = useDiagram();
-  const { connection: pendingConnection, closeDialog } =
-    useRelationshipDialog();
+  const {
+    connection: pendingConnection,
+    closeDialog,
+    isOpen,
+  } = useRelationshipDialog();
 
   const form = useForm<z.infer<typeof relationFormSchema>>({
     resolver: zodResolver(relationFormSchema),
@@ -49,6 +52,10 @@ export default function AddRelationDialog() {
       fields: [],
     },
   });
+
+  useEffect(() => {
+    form.reset();
+  }, [isOpen]);
 
   const { sourceModel, targetModel } = useMemo(() => {
     const sourceModel = nodes.find(
@@ -75,7 +82,6 @@ export default function AddRelationDialog() {
       return;
     }
 
-    debugger;
     // add source relation field
     addField(sourceModel.id, {
       name: data.sourceRelationName,
@@ -134,6 +140,7 @@ export default function AddRelationDialog() {
     onConnect(pendingConnection);
 
     closeDialog();
+    form.reset();
   }
 
   const referenceOptions = useMemo(() => {
