@@ -1,37 +1,10 @@
-import { Model, ModelField } from "@/types/schema";
-import {
-  addEdge,
-  applyEdgeChanges,
-  applyNodeChanges,
-  Edge,
-  Node,
-  OnConnect,
-  OnEdgesChange,
-  OnNodesChange,
-} from "@xyflow/react";
+import { addEdge, applyEdgeChanges, applyNodeChanges } from "@xyflow/react";
 import { create } from "zustand";
 import { persist, createJSONStorage } from "zustand/middleware";
 import { v4 as uuidv4 } from "uuid";
+import { DiagramState } from "@/types/store";
 
-interface Diagram {
-  nodes: Node<Model, "model">[];
-  edges: Edge[];
-
-  onNodesChange: OnNodesChange<Node<Model, "model">>;
-  onEdgesChange: OnEdgesChange;
-  onConnect: OnConnect;
-
-  addModel: (model: Model, position: { x: number; y: number }) => void;
-  removeModel: (id: string) => void;
-
-  addField: (nodeId: string, field: ModelField) => void;
-  removeField: (nodeId: string, fieldName: string) => void;
-
-  hasHydrated: boolean;
-  setHasHydrated: (hasHydrated: boolean) => void;
-}
-
-export const useDiagram = create<Diagram>()(
+export const useDiagram = create<DiagramState>()(
   persist(
     (set, get) => ({
       nodes: [],
@@ -58,6 +31,29 @@ export const useDiagram = create<Diagram>()(
           ),
         });
       },
+      removeRelation: (edgeId) => {
+        const edge = get().edges.find((edge) => edge.id === edgeId);
+        if (!edge) return;
+
+        const targetNode = get().nodes.find((node) => node.id === edge.target);
+        const sourceNode = get().nodes.find((node) => node.id === edge.source);
+        set({
+          nodes: get().nodes.map((node) => {
+            return {
+              ...node,
+              data: {
+                ...node.data,
+                fields: node.data.fields.filter(
+                  (field) =>
+                    field.type !== targetNode?.data.name &&
+                    field.type !== sourceNode?.data.name
+                ),
+              },
+            };
+          }),
+          edges: get().edges.filter((edge) => edge.id !== edgeId),
+        });
+      },
 
       addModel: (model, position) =>
         set((state) => ({
@@ -71,8 +67,21 @@ export const useDiagram = create<Diagram>()(
             },
           ],
         })),
+      editModel: (model, nodeId: string) =>
+        set((state) => ({
+          nodes: state.nodes.map((node) => {
+            if (nodeId === node.id) {
+              return {
+                ...node,
+                data: model,
+              };
+            }
+            return node;
+          }),
+        })),
       removeModel: (id) =>
         set((state) => ({ nodes: state.nodes.filter((n) => n.id !== id) })),
+
       addField: (nodeId, field) => {
         set((state) => ({
           nodes: state.nodes.map((node) => {
@@ -89,6 +98,7 @@ export const useDiagram = create<Diagram>()(
           }),
         }));
       },
+
       removeField: (nodeId, fieldName) => {
         set((state) => ({
           nodes: state.nodes.map((node) => {

@@ -2,7 +2,6 @@
 import { Dialog, DialogContent, DialogTitle } from "@/components/ui/dialog";
 import { DialogHeader } from "@/components/ui/dialog";
 import { useDiagram } from "@/store/diagram";
-import { Connection } from "@xyflow/react";
 import { useMemo } from "react";
 import { z } from "@/lib/pt-zod";
 import { useForm } from "react-hook-form";
@@ -28,63 +27,116 @@ import {
 } from "@/components/ui/select";
 import Link from "next/link";
 import MultipleSelector from "@/components/ui/multi-select";
+import { FieldAttributeName } from "@/types/schema-enums";
+import { RelationshipType } from "@/types/relationship";
+import { relationFormSchema } from "@/schemas/relation";
+import { useRelationshipDialog } from "@/store/dialogs";
+import { toast } from "sonner";
 
-interface AddRelationDialogProps {
-  onClose: () => void;
-  pendingRelationship: Connection | null;
-}
-
-enum RelationshipType {
-  ONE_TO_ONE = "ONE_TO_ONE",
-  ONE_TO_MANY = "ONE_TO_MANY",
-  MANY_TO_MANY = "MANY_TO_MANY",
-}
-
-const relationFormSchema = z.object({
-  relationFieldName: z.string().min(1, "O nome do campo é obrigatório."),
-  relationFieldId: z.string().min(1, "O nome do campo ID é obrigatório."),
-  relationName: z.string().optional(),
-  relationshipType: z.nativeEnum(RelationshipType),
-  fields: z.array(z.string()),
-  references: z.array(z.string()),
-  onDelete: z.enum(["CASCADE", "SET_NULL", "NO_ACTION", "RESTRICT"]).optional(),
-  onUpdate: z.enum(["CASCADE", "SET_NULL", "NO_ACTION", "RESTRICT"]).optional(),
-});
-
-export default function AddRelationDialog({
-  onClose,
-  pendingRelationship,
-}: AddRelationDialogProps) {
-  const { nodes } = useDiagram();
+export default function AddRelationDialog() {
+  const { nodes, addField, onConnect } = useDiagram();
+  const { connection: pendingConnection, closeDialog } =
+    useRelationshipDialog();
 
   const form = useForm<z.infer<typeof relationFormSchema>>({
     resolver: zodResolver(relationFormSchema),
     defaultValues: {
       relationName: "",
-      relationFieldId: "",
-      relationFieldName: "",
+      sourceRelationName: "",
+      targetRelationName: "",
       relationshipType: RelationshipType.ONE_TO_ONE,
-      fields: [],
       references: [],
+      fields: [],
     },
   });
 
   const { sourceModel, targetModel } = useMemo(() => {
     const sourceModel = nodes.find(
-      (node) => node.id === pendingRelationship?.source
+      (node) => node.id === pendingConnection?.source
     );
     const targetModel = nodes.find(
-      (node) => node.id === pendingRelationship?.target
+      (node) => node.id === pendingConnection?.target
     );
 
     return { sourceModel, targetModel };
-  }, [pendingRelationship, nodes]);
+  }, [pendingConnection, nodes]);
 
-  function saveModel({ relationName }: z.infer<typeof relationFormSchema>) {
-    console.log(relationName);
+  function saveRelation(data: z.infer<typeof relationFormSchema>) {
+    if (!sourceModel || !targetModel || !pendingConnection) return;
+
+    const sourceIdFields = sourceModel.data.fields.filter((field) => {
+      return field.attributes.some(
+        (attribute) => attribute.name === FieldAttributeName.id
+      );
+    });
+
+    if (!sourceIdFields.length) {
+      toast.error("A tabela de origem precisa ter um campo de ID.");
+      return;
+    }
+
+    debugger;
+    // add source relation field
+    addField(sourceModel.id, {
+      name: data.sourceRelationName,
+      type: targetModel.data.name,
+      attributes: [],
+      isList:
+        data.relationshipType === RelationshipType.ONE_TO_MANY ||
+        data.relationshipType === RelationshipType.MANY_TO_MANY,
+      isOptional: false,
+    });
+
+    let fields = data.fields;
+
+    if (!fields.length) {
+      // se o usuário não definir os campos, vamos criar um novo
+      const targetRelationFieldName = `${data.targetRelationName}Id`;
+
+      fields = [targetRelationFieldName];
+
+      addField(targetModel.id, {
+        name: targetRelationFieldName,
+        type: sourceIdFields[0].type, // o tipo do campo de ID
+        attributes: [],
+        isList: false,
+        isOptional: false,
+      });
+    }
+
+    // add target model field
+    addField(targetModel.id, {
+      name: data.targetRelationName,
+      type: sourceModel.data.name,
+      attributes: [
+        {
+          name: FieldAttributeName.relation,
+          arguments: [
+            {
+              name: "name",
+              value: data.relationName || "",
+            },
+            {
+              name: "fields",
+              value: fields,
+            },
+            {
+              name: "references",
+              value: data.references,
+            },
+          ],
+        },
+      ],
+      isList: data.relationshipType === RelationshipType.MANY_TO_MANY,
+      isOptional: false,
+    });
+
+    onConnect(pendingConnection);
+
+    closeDialog();
   }
 
-  const fieldOptions = useMemo(() => {
+  const referenceOptions = useMemo(() => {
     return (
       sourceModel?.data.fields.map((field) => ({
         label: field.name,
@@ -93,81 +145,42 @@ export default function AddRelationDialog({
     );
   }, [sourceModel]);
 
+  const targetFieldOptions = useMemo(() => {
+    return (
+      targetModel?.data.fields.map((field) => ({
+        label: field.name,
+        value: field.name,
+      })) || []
+    );
+  }, [targetModel]);
+
   return (
     <Dialog
-      open={!!pendingRelationship}
+      open={!!pendingConnection}
       onOpenChange={(open) => {
         if (!open) {
-          onClose();
+          closeDialog();
         }
       }}
     >
-      <DialogContent className="max-w-[1280px] max-h-screen overflow-y-auto">
+      <DialogContent className="max-w-[1000px] max-h-screen overflow-auto">
         <DialogHeader>
           <DialogTitle>
-            Adicionar relação | {sourceModel?.data.name || ""} ↔{" "}
-            {targetModel?.data?.name || ""}
+            Você está criando uma relação entre <u>{sourceModel?.data.name}</u>{" "}
+            e <u>{targetModel?.data?.name}</u>
           </DialogTitle>
         </DialogHeader>
         <Form {...form}>
-          <form onSubmit={form.handleSubmit(saveModel)} className="space-y-2">
+          <form
+            onSubmit={form.handleSubmit(saveRelation)}
+            className="space-y-2"
+          >
             <div className="flex flex-wrap gap-4">
-              <FormField
-                control={form.control}
-                name="relationFieldName"
-                render={({ field }) => (
-                  <FormItem className="w-full max-w-[320px]">
-                    <FormLabel>Nome do campo de relação</FormLabel>
-                    <FormControl>
-                      <Input placeholder="Exemplo: author" {...field} />
-                    </FormControl>
-                    <FormDescription>
-                      Nome do campo que representará a relação. Exemplo:{" "}
-                      <code>author</code>.
-                    </FormDescription>
-                    <FormMessage />
-                  </FormItem>
-                )}
-              />
-
-              <FormField
-                control={form.control}
-                name="relationFieldId"
-                render={({ field }) => (
-                  <FormItem>
-                    <FormLabel>Nome do campo ID</FormLabel>
-                    <FormControl>
-                      <Input placeholder="Exemplo: authorId" {...field} />
-                    </FormControl>
-                    <FormDescription>
-                      Nome do campo que armazenará o identificador da relação.
-                      Exemplo: <code>authorId</code>.
-                    </FormDescription>
-                    <FormMessage />
-                  </FormItem>
-                )}
-              />
-              <FormField
-                control={form.control}
-                name="relationName"
-                render={({ field }) => (
-                  <FormItem className="flex-1 max-w-[280px] min-w-[200px]">
-                    <FormLabel>Nome</FormLabel>
-                    <FormControl>
-                      <Input placeholder="Nome da relação" {...field} />
-                    </FormControl>
-                    <FormDescription>
-                      Opcional, usado para ambiguidade em relações
-                    </FormDescription>
-                    <FormMessage />
-                  </FormItem>
-                )}
-              />
               <FormField
                 control={form.control}
                 name="relationshipType"
                 render={({ field }) => (
-                  <FormItem>
+                  <FormItem className="max-w-[300px]">
                     <FormLabel>Tipo de relação</FormLabel>
                     <Select
                       onValueChange={field.onChange}
@@ -206,71 +219,121 @@ export default function AddRelationDialog({
                   </FormItem>
                 )}
               />
-              <FormField
-                control={form.control}
-                name="fields"
-                render={({ field }) => (
-                  <FormItem>
-                    <FormLabel>
-                      Campos de origem (fields) <b>{sourceModel?.data.name}</b>
-                    </FormLabel>
-                    <MultipleSelector
-                      value={fieldOptions.filter((o) =>
-                        field?.value?.includes(o.value)
-                      )}
-                      onChange={(options) => {
-                        field.onChange(options.map((o) => o.value));
-                      }}
-                      defaultOptions={fieldOptions}
-                      placeholder="Selecione um campo de origem"
-                      emptyIndicator={
-                        <p className="text-center text-lg leading-10 text-gray-600 dark:text-gray-400">
-                          Sem resultados encontrados.
-                        </p>
-                      }
-                    />
-                    <FormDescription>
-                      Campos da tabela de origem que fazem referência à tabela
-                      alvo.
-                    </FormDescription>
-                    <FormMessage />
-                  </FormItem>
-                )}
-              />
-
-              <FormField
-                control={form.control}
-                name="references"
-                render={({ field }) => (
-                  <FormItem>
-                    <FormLabel>
-                      Campos referenciados (references){" "}
-                      <b>{targetModel?.data.name}</b>
-                    </FormLabel>
-                    <Select
-                      onValueChange={(value) => field.onChange([value])} // Se for um único campo
-                      defaultValue={field.value?.[0] || ""}
-                    >
+              <div className="flex gap-2">
+                <FormField
+                  control={form.control}
+                  name="sourceRelationName"
+                  render={({ field }) => (
+                    <FormItem className="w-full min-w-[320px]">
+                      <FormLabel>
+                        Nome da relação que ficará em{" "}
+                        <b>{sourceModel?.data.name}</b>
+                      </FormLabel>
                       <FormControl>
-                        <SelectTrigger>
-                          <SelectValue placeholder="Selecione um campo referenciado" />
-                        </SelectTrigger>
+                        <Input
+                          spellCheck={false}
+                          placeholder="Exemplo: posts"
+                          {...field}
+                        />
                       </FormControl>
-                      <SelectContent>
-                        {targetModel?.data.fields.map((field) => (
-                          <SelectItem key={field.name} value={field.name}>
-                            {field.name}
-                          </SelectItem>
-                        ))}
-                      </SelectContent>
-                    </Select>
-                    <FormDescription>
-                      Campos da tabela alvo que são referenciados.
-                    </FormDescription>
-                    <FormMessage />
-                  </FormItem>
-                )}
-              />
+                      <FormDescription>
+                        Nome da relação na origem. Exemplo: <code>posts</code>.
+                      </FormDescription>
+                      <FormMessage />
+                    </FormItem>
+                  )}
+                />
+                <FormField
+                  control={form.control}
+                  name="targetRelationName"
+                  render={({ field }) => (
+                    <FormItem className="w-full min-w-[320px]">
+                      <FormLabel>
+                        Nome da relação que ficará em{" "}
+                        <b>{targetModel?.data.name}</b>
+                      </FormLabel>
+                      <FormControl>
+                        <Input
+                          spellCheck={false}
+                          placeholder="Exemplo: author"
+                          {...field}
+                        />
+                      </FormControl>
+                      <FormDescription>
+                        Nome da relação no alvo. Exemplo: <code>author</code>.
+                      </FormDescription>
+                      <FormMessage />
+                    </FormItem>
+                  )}
+                />
+              </div>
+              <div className="flex gap-2">
+                <FormField
+                  control={form.control}
+                  name="references"
+                  render={({ field }) => (
+                    <FormItem>
+                      <FormLabel>
+                        Campos referenciados de <b>{sourceModel?.data.name}</b>
+                      </FormLabel>
+                      <MultipleSelector
+                        value={referenceOptions.filter((o) =>
+                          field?.value?.includes(o.value)
+                        )}
+                        onChange={(options) => {
+                          field.onChange(options.map((o) => o.value));
+                        }}
+                        defaultOptions={referenceOptions}
+                        placeholder="Selecione os campos"
+                        emptyIndicator={
+                          <p className="text-center text-md leading-10 text-gray-600 dark:text-gray-400">
+                            Sem resultados encontrados.
+                          </p>
+                        }
+                      />
+                      <FormDescription>
+                        Campos da tabela de origem que são referenciados.
+                      </FormDescription>
+                      <FormMessage />
+                    </FormItem>
+                  )}
+                />
+                <FormField
+                  control={form.control}
+                  name="fields"
+                  render={({ field }) => (
+                    <FormItem>
+                      <FormLabel>
+                        Campos da relação <b>{targetModel?.data.name}</b>
+                      </FormLabel>
+                      <MultipleSelector
+                        value={targetFieldOptions.filter((o) =>
+                          field?.value?.includes(o.value)
+                        )}
+                        onChange={(options) => {
+                          field.onChange(options.map((o) => o.value));
+                        }}
+                        defaultOptions={targetFieldOptions}
+                        placeholder="Selecione os campos"
+                        emptyIndicator={
+                          <p className="text-center text-md leading-10 text-gray-600 dark:text-gray-400">
+                            Sem resultados encontrados.
+                          </p>
+                        }
+                      />
+                      <FormDescription>
+                        Campos da tabela alvo que serão usados para montar a
+                        relação. <br />
+                        Se deixar vazio um novo nome será criado usando o tipo
+                        de relação e o nome da tabela alvo.
+                      </FormDescription>
+                      <FormMessage />
+                    </FormItem>
+                  )}
+                />
+              </div>
+            </div>
+            <div className="flex gap-4 flex-wrap">
               <FormField
                 control={form.control}
                 name="onDelete"
@@ -320,6 +383,26 @@ export default function AddRelationDialog({
                         <SelectItem value="RESTRICT">RESTRICT</SelectItem>
                       </SelectContent>
                     </Select>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
+              <FormField
+                control={form.control}
+                name="relationName"
+                render={({ field }) => (
+                  <FormItem className="flex-1 max-w-[280px] min-w-[200px]">
+                    <FormLabel>Nome</FormLabel>
+                    <FormControl>
+                      <Input
+                        spellCheck={false}
+                        placeholder="Nome da relação"
+                        {...field}
+                      />
+                    </FormControl>
+                    <FormDescription>
+                      Opcional, usado para ambiguidade em relações
+                    </FormDescription>
                     <FormMessage />
                   </FormItem>
                 )}

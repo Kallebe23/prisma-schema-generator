@@ -1,17 +1,19 @@
-import { Separator } from "@/components/ui/separator";
 import { Model } from "@/types/schema";
-import { Node, useNodeId, useNodesData } from "@xyflow/react";
-import { Fragment } from "react";
-import DeleteFieldButton from "./delete-field-button";
+import { Fragment, useMemo } from "react";
+import { FieldAttributes } from "./attributes";
+import DeleteFieldButton from "../delete-field-button";
+import { Separator } from "@/components/ui/separator";
 
-export default function ModelFields() {
-  const nodeId = useNodeId();
-  const node = useNodesData<Node<Model>>(nodeId || "");
-  const fields = node?.data.fields || [];
+export default function ModelFields({ fields }: { fields: Model["fields"] }) {
+  const filteredFields = useMemo(() => {
+    return fields.filter(
+      (field) => !field.attributes.find((attr) => attr.name === "@relation")
+    );
+  }, [fields]);
 
   return (
     <div className="spacing-y-1">
-      {fields.map((field, index) => (
+      {filteredFields.map((field, index) => (
         <Fragment key={field.name}>
           <div className="p-1 flex gap-2 items-center justify-between">
             <div className="flex gap-2">
@@ -21,9 +23,7 @@ export default function ModelFields() {
                 {field.isList && "[]"}
                 {field.isOptional && "?"}
               </span>
-              {field.attributes?.map((attr) => (
-                <span key={attr.name}>{attr.name}</span>
-              ))}
+              <FieldAttributes attributes={field.attributes} />
             </div>
             <DeleteFieldButton field={field} />
           </div>

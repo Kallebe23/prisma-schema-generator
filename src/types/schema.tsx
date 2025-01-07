@@ -31,7 +31,7 @@ export interface ModelField {
   // Must adhere to the following regular expression: [A-Za-z][A-Za-z0-9_]*
   name: string;
 
-  type: ModelFieldScalarType;
+  type: ModelFieldScalarType | string;
 
   isOptional: boolean;
   isList: boolean;

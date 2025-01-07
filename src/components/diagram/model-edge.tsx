@@ -1,44 +1,70 @@
-import React from "react";
+import React, { useMemo } from "react";
 import {
   BaseEdge,
+  Edge,
   EdgeLabelRenderer,
   getBezierPath,
-  useInternalNode,
-  useReactFlow,
   type EdgeProps,
 } from "@xyflow/react";
 import { Button } from "../ui/button";
 import { X } from "lucide-react";
+import { useDiagram } from "@/store/diagram";
 
-import { getEdgeParams } from "@/lib/floating-edge";
-
-export function ModelEdge({ id, source, target }: EdgeProps) {
-  const { setEdges } = useReactFlow();
-
-  const sourceNode = useInternalNode(source);
-  const targetNode = useInternalNode(target);
-
-  if (!sourceNode || !targetNode) {
-    return null;
-  }
-
-  const { sx, sy, tx, ty, sourcePos, targetPos } = getEdgeParams(
-    sourceNode,
-    targetNode
-  );
+export function ModelEdge({
+  id,
+  source,
+  target,
+  sourceX,
+  sourceY,
+  targetX,
+  targetY,
+  sourcePosition,
+  targetPosition,
+  selected,
+}: EdgeProps<Edge<{ label: string }>>) {
+  const { removeRelation, nodes } = useDiagram();
 
   const [edgePath, labelX, labelY] = getBezierPath({
-    sourceX: sx,
-    sourceY: sy,
-    sourcePosition: sourcePos,
-    targetPosition: targetPos,
-    targetX: tx,
-    targetY: ty,
+    sourceX,
+    sourceY,
+    sourcePosition,
+    targetX,
+    targetY,
+    targetPosition,
   });
 
-  const deleteEdge = () => {
-    setEdges((edges) => edges.filter((edge) => edge.id !== id));
+  const handleRemoveRelation = () => {
+    removeRelation(id);
   };
+
+  const { sourceNode, targetNode } = useMemo(() => {
+    const sourceNode = nodes.find((node) => node.id === source);
+    const targetNode = nodes.find((node) => node.id === target);
+    return { sourceNode, targetNode };
+  }, [nodes, source, target]);
+
+  const relationType = useMemo(() => {
+    if (!sourceNode || !targetNode) return "";
+
+    const sourceOccurences = sourceNode.data.fields.filter(
+      (sourceField) => sourceField.type === targetNode.data.name
+    );
+
+    const targetOccurences = targetNode.data.fields.filter(
+      (sourceField) => sourceField.type === sourceNode.data.name
+    );
+
+    const hasListInSource = sourceOccurences.some(
+      (sourceField) => sourceField.isList
+    );
+    const hasListInTarget = targetOccurences.some(
+      (targetField) => targetField.isList
+    );
+
+    if (!hasListInSource && !hasListInTarget) return "1-1";
+    if (hasListInSource && !hasListInTarget) return "1-n";
+    if (hasListInSource && hasListInTarget) return "m-n";
+  }, [sourceNode, targetNode]);
 
   return (
     <>
@@ -46,14 +72,26 @@ export function ModelEdge({ id, source, target }: EdgeProps) {
       <EdgeLabelRenderer>
         <div
           style={{
+            padding: 8,
+            background: "#dfdfdf",
+            border: "2px solid #aaa",
             position: "absolute",
             pointerEvents: "all",
             transform: `translate(-50%, -50%) translate(${labelX}px,${labelY}px)`,
           }}
+          className="relative rounded-full"
         >
-          <Button onClick={deleteEdge} size="icon" className="nodrag nopan">
-            <X />
-          </Button>
+          {relationType}
+          {selected && (
+            <Button
+              className="p-2 h-[24px] w-[24px] rounded-full absolute top-[-20px]"
+              size="icon"
+              variant="outline"
+              onClick={handleRemoveRelation}
+            >
+              <X />
+            </Button>
+          )}
         </div>
       </EdgeLabelRenderer>
     </>

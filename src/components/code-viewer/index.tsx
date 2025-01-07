@@ -22,7 +22,7 @@ export function CodeViewer() {
   }, [nodes]);
 
   return (
-    <div>
+    <div className="min-w-[400px] max-w-[600px]">
       <CodeBlock code={code} />
       <CopyButton code={code} className="absolute top-4 right-4" />
     </div>
